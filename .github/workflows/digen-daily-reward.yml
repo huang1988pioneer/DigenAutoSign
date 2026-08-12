@@ -319,11 +319,20 @@ jobs:
           restore-keys: |
             checkin-streaks-
 
-      - name: Build daily summary
+      - name: Build daily summary (Job Summary)
         env:
           DIGEN_SUMMARY_DIR: artifacts
           DIGEN_STREAK_STATE: streak-state/checkin-streaks.json
-        run: npm run summary -- collected
+        run: |
+          # Writes the MindVideo-style markdown to the run Job Summary and artifacts/.
+          npm run summary -- collected
+          echo "----- preview -----"
+          if [ -f artifacts/checkin-daily-summary.md ]; then
+            cat artifacts/checkin-daily-summary.md
+          else
+            echo "summary markdown missing"
+            exit 1
+          fi
 
       - name: Save consecutive check-in state
         if: always()
