@@ -56,7 +56,7 @@ internal sealed class GitHubActionsService
 
                 // Matrix jobs for missing secrets often complete with success after writing skipped result.
                 // Prefer job name label; mark unconfigured when conclusion is skipped or name is default accountN with skipped artifact semantics.
-                byNumber[number] = new AccountRunStatus(number, alias, display, configured, null, null);
+                byNumber[number] = new AccountRunStatus(number, alias, display, configured, null, null, null, null, null);
             }
 
             var streaks = await TryLoadStreaksAsync(repository, runId);
@@ -64,13 +64,16 @@ internal sealed class GitHubActionsService
                 .Select(number =>
                 {
                     var baseStatus = byNumber.GetValueOrDefault(number)
-                        ?? new AccountRunStatus(number, $"account{number}", "未出現在此 run", false, null, null);
+                        ?? new AccountRunStatus(number, $"account{number}", "未出現在此 run", false, null, null, null, null, null);
                     if (streaks.TryGetValue(number, out var streakInfo))
                     {
                         return baseStatus with
                         {
                             Streak = streakInfo.Streak,
                             LongestStreak = streakInfo.LongestStreak,
+                            ConsecutiveSuccessDays = streakInfo.ConsecutiveSuccessDays,
+                            LastSuccessAt = streakInfo.LastSuccessAt,
+                            LastFailureAt = streakInfo.LastFailureAt,
                             Alias = string.IsNullOrWhiteSpace(streakInfo.Name) ? baseStatus.Alias : streakInfo.Name
                         };
                     }
@@ -159,7 +162,16 @@ internal sealed class GitHubActionsService
                 var longest = row.TryGetProperty("longestStreak", out var longEl) && longEl.ValueKind == JsonValueKind.Number
                     ? longEl.GetInt32()
                     : 0;
-                into[number] = new StreakInfo(name, streak, longest);
+                var consecutive = row.TryGetProperty("consecutiveSuccessDays", out var consecutiveEl) && consecutiveEl.ValueKind == JsonValueKind.Number
+                    ? consecutiveEl.GetInt32()
+                    : streak;
+                var lastSuccessAt = row.TryGetProperty("lastSuccessAt", out var successAtEl) && successAtEl.ValueKind == JsonValueKind.String
+                    ? successAtEl.GetString()
+                    : null;
+                var lastFailureAt = row.TryGetProperty("lastFailureAt", out var failureAtEl) && failureAtEl.ValueKind == JsonValueKind.String
+                    ? failureAtEl.GetString()
+                    : null;
+                into[number] = new StreakInfo(name, streak, longest, consecutive, lastSuccessAt, lastFailureAt);
             }
 
             return into.Count > 0;
@@ -190,7 +202,16 @@ internal sealed class GitHubActionsService
                 var longest = entry.TryGetProperty("longestStreak", out var longEl) && longEl.ValueKind == JsonValueKind.Number
                     ? longEl.GetInt32()
                     : 0;
-                into[number] = new StreakInfo(name, streak, longest);
+                var consecutive = entry.TryGetProperty("consecutiveSuccessDays", out var consecutiveEl) && consecutiveEl.ValueKind == JsonValueKind.Number
+                    ? consecutiveEl.GetInt32()
+                    : streak;
+                var lastSuccessAt = entry.TryGetProperty("lastSuccessAt", out var successAtEl) && successAtEl.ValueKind == JsonValueKind.String
+                    ? successAtEl.GetString()
+                    : null;
+                var lastFailureAt = entry.TryGetProperty("lastFailureAt", out var failureAtEl) && failureAtEl.ValueKind == JsonValueKind.String
+                    ? failureAtEl.GetString()
+                    : null;
+                into[number] = new StreakInfo(name, streak, longest, consecutive, lastSuccessAt, lastFailureAt);
             }
 
             return into.Count > 0;
@@ -223,7 +244,7 @@ internal sealed class GitHubActionsService
 
     private static AccountRunStatus[] EmptyStatuses() =>
         Enumerable.Range(1, 33)
-            .Select(number => new AccountRunStatus(number, $"account{number}", "尚未讀取", false, null, null))
+            .Select(number => new AccountRunStatus(number, $"account{number}", "尚未讀取", false, null, null, null, null, null))
             .ToArray();
 
     private static async Task<string> RunGhAsync(IEnumerable<string> arguments, string? workingDirectory = null)
@@ -285,6 +306,15 @@ internal sealed record AccountRunStatus(
     string Status,
     bool IsConfigured,
     int? Streak,
-    int? LongestStreak);
+    int? LongestStreak,
+    int? ConsecutiveSuccessDays,
+    string? LastSuccessAt,
+    string? LastFailureAt);
 
-internal sealed record StreakInfo(string? Name, int Streak, int LongestStreak);
+internal sealed record StreakInfo(
+    string? Name,
+    int Streak,
+    int LongestStreak,
+    int ConsecutiveSuccessDays,
+    string? LastSuccessAt,
+    string? LastFailureAt);

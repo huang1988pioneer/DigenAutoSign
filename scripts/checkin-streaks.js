@@ -74,18 +74,25 @@ function normalizePrev(entry) {
     return {
       name: null,
       streak: 0,
+      consecutiveSuccessDays: 0,
       longestStreak: 0,
       lastSuccessDate: null,
+      lastSuccessAt: null,
+      lastFailureAt: null,
       lastStatus: null,
       totalSuccessDays: 0
     };
   }
 
+  const streak = Number(entry.streak ?? entry.consecutiveSuccessDays) || 0;
   return {
     name: entry.name ?? null,
-    streak: Number(entry.streak) || 0,
+    streak,
+    consecutiveSuccessDays: streak,
     longestStreak: Number(entry.longestStreak) || 0,
     lastSuccessDate: entry.lastSuccessDate || null,
+    lastSuccessAt: entry.lastSuccessAt || entry.lastSuccessfulActionAt || null,
+    lastFailureAt: entry.lastFailureAt || entry.lastFailedActionAt || null,
     lastStatus: entry.lastStatus || null,
     totalSuccessDays: Number(entry.totalSuccessDays) || 0
   };
@@ -93,13 +100,14 @@ function normalizePrev(entry) {
 
 /**
  * Update one account's streak for a run on `today` (Taipei YYYY-MM-DD).
- * @returns {{ streak, longestStreak, lastSuccessDate, lastStatus, totalSuccessDays, name }}
+ * @returns {{ streak, consecutiveSuccessDays, longestStreak, lastSuccessDate, lastSuccessAt, lastFailureAt, lastStatus, totalSuccessDays, name }}
  */
-export function updateAccountStreak(prevInput, { name, status, today }) {
+export function updateAccountStreak(prevInput, { name, status, today, actionAt = null }) {
   const prev = normalizePrev(prevInput);
   const yesterday = previousTaipeiDate(today);
   const isSuccess = SUCCESS_STATUSES.has(status);
   const displayName = name || prev.name || null;
+  const timestamp = actionAt || null;
 
   if (isSuccess) {
     let streak;
@@ -119,19 +127,27 @@ export function updateAccountStreak(prevInput, { name, status, today }) {
     return {
       name: displayName,
       streak,
+      consecutiveSuccessDays: streak,
       longestStreak,
       lastSuccessDate: today,
+      lastSuccessAt: timestamp || prev.lastSuccessAt,
+      lastFailureAt: prev.lastFailureAt,
       lastStatus: status,
       totalSuccessDays
     };
   }
 
   // Failed / skipped / unknown this run.
+  const lastFailureAt = status === "failed"
+    ? timestamp || prev.lastFailureAt
+    : prev.lastFailureAt;
+
   if (prev.lastSuccessDate === today) {
     // Already succeeded earlier today; keep streak.
     return {
       ...prev,
       name: displayName,
+      lastFailureAt,
       lastStatus: status
     };
   }
@@ -141,6 +157,7 @@ export function updateAccountStreak(prevInput, { name, status, today }) {
     return {
       ...prev,
       name: displayName,
+      lastFailureAt,
       lastStatus: status
     };
   }
@@ -149,8 +166,11 @@ export function updateAccountStreak(prevInput, { name, status, today }) {
   return {
     name: displayName,
     streak: 0,
+    consecutiveSuccessDays: 0,
     longestStreak: prev.longestStreak,
     lastSuccessDate: prev.lastSuccessDate,
+    lastSuccessAt: prev.lastSuccessAt,
+    lastFailureAt,
     lastStatus: status,
     totalSuccessDays: prev.totalSuccessDays
   };
@@ -178,7 +198,8 @@ export function applyRowsToStreakState(prevState, rows, today = taipeiDateString
     state.accounts[key] = updateAccountStreak(prev, {
       name: row.name,
       status: row.status,
-      today
+      today,
+      actionAt: row.finishedAt || row.actionAt || null
     });
   }
 
@@ -192,8 +213,11 @@ export function attachStreaksToRows(rows, streakState) {
     return {
       ...row,
       streak: entry?.streak ?? 0,
+      consecutiveSuccessDays: entry?.consecutiveSuccessDays ?? entry?.streak ?? 0,
       longestStreak: entry?.longestStreak ?? 0,
       lastSuccessDate: entry?.lastSuccessDate ?? null,
+      lastSuccessAt: entry?.lastSuccessAt ?? null,
+      lastFailureAt: entry?.lastFailureAt ?? null,
       totalSuccessDays: entry?.totalSuccessDays ?? 0
     };
   });

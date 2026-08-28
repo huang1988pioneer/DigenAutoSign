@@ -146,6 +146,27 @@ function fmtStreak(value) {
   return Number.isFinite(number) && number > 0 ? `${number}d` : "0";
 }
 
+function fmtActionTime(value) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return compactMessage(value, 24);
+  return parsed.toISOString().replace("T", " ").replace(".000Z", "Z");
+}
+
+function latestTimestamp(values) {
+  return values
+    .filter((value) => value && !Number.isNaN(new Date(value).getTime()))
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] || null;
+}
+
+function actionStats(rows, streakSummary) {
+  return {
+    lastSuccessActionAt: latestTimestamp(rows.map((row) => row.lastSuccessAt)),
+    lastFailureActionAt: latestTimestamp(rows.map((row) => row.lastFailureAt)),
+    maxConsecutiveSuccessDays: streakSummary.maxStreak
+  };
+}
+
 function noteForRow(row) {
   if (row.status === "checked_in" && Number(row.creditsDelta) > 0) return "new today";
   if (row.status === "already_done") return "claimed earlier";
@@ -190,6 +211,8 @@ function buildMarkdown(rows, meta) {
     `| Accounts with streak | ${meta.streakStats.accountsWithStreak} |`,
     `| Max continuous days | ${meta.streakStats.maxStreak} |`,
     `| Avg continuous days | ${meta.streakStats.avgStreak} |`,
+    `| Last successful action | ${fmtActionTime(meta.actionStats.lastSuccessActionAt)} |`,
+    `| Last failed action | ${fmtActionTime(meta.actionStats.lastFailureActionAt)} |`,
     "",
     `- Generated at: \`${meta.generatedAt}\``,
     `- Streak date (Asia/Taipei): \`${meta.asOfDate}\``,
@@ -204,8 +227,10 @@ function buildMarkdown(rows, meta) {
     lines.push("");
   }
   if (activeRows.length) {
-    lines.push("### Account results", "", "| # | Account | Status | Reward | Streak | Best | Note |", "| ---: | --- | --- | ---: | ---: | ---: | --- |");
-    for (const row of activeRows) lines.push(`| ${row.account ?? "?"} | ${escapeCell(shortLabel(row))} | ${statusBadge(row.status)} | ${fmtCredits(row.creditsDelta)} | ${fmtStreak(row.streak)} | ${fmtStreak(row.longestStreak)} | ${escapeCell(noteForRow(row))} |`);
+    lines.push("### Account results", "", "| # | Account | Status | Reward | Consecutive success days | Last success action | Last failed action | Best | Note |", "| ---: | --- | --- | ---: | ---: | --- | --- | ---: | --- |");
+    for (const row of activeRows) {
+      lines.push(`| ${row.account ?? "?"} | ${escapeCell(shortLabel(row))} | ${statusBadge(row.status)} | ${fmtCredits(row.creditsDelta)} | ${fmtStreak(row.consecutiveSuccessDays ?? row.streak)} | ${fmtActionTime(row.lastSuccessAt)} | ${fmtActionTime(row.lastFailureAt)} | ${fmtStreak(row.longestStreak)} | ${escapeCell(noteForRow(row))} |`);
+    }
     lines.push("");
   }
   if (skippedRows.length) {
@@ -232,15 +257,23 @@ function main() {
   const asOfDate = process.env.DIGEN_STREAK_DATE || taipeiDateString();
   const streakState = applyRowsToStreakState(loadStreakState(streakStatePath), rows, asOfDate);
   const enrichedRows = attachStreaksToRows(rows, streakState);
+  const streakSummary = streakStats(streakState);
+  const actionSummary = actionStats(enrichedRows, streakSummary);
   const serverUrl = process.env.GITHUB_SERVER_URL || "https://github.com";
   const runUrl = process.env.GITHUB_REPOSITORY && process.env.GITHUB_RUN_ID
     ? `${serverUrl}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}` : null;
   const generatedAt = new Date().toISOString();
-  const { markdown, counts, gained } = buildMarkdown(enrichedRows, { generatedAt, asOfDate, runUrl, streakStats: streakStats(streakState) });
+  const { markdown, counts, gained } = buildMarkdown(enrichedRows, {
+    generatedAt,
+    asOfDate,
+    runUrl,
+    streakStats: streakSummary,
+    actionStats: actionSummary
+  });
 
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(path.join(outDir, "checkin-daily-summary.md"), markdown, "utf8");
-  fs.writeFileSync(path.join(outDir, "checkin-daily-summary.json"), `${JSON.stringify({ generatedAt, asOfDate, timezone: "Asia/Taipei", runUrl, counts, gained, rows: enrichedRows }, null, 2)}\n`, "utf8");
+  fs.writeFileSync(path.join(outDir, "checkin-daily-summary.json"), `${JSON.stringify({ generatedAt, asOfDate, timezone: "Asia/Taipei", runUrl, counts, gained, streakStats: streakSummary, actionStats: actionSummary, rows: enrichedRows }, null, 2)}\n`, "utf8");
   fs.writeFileSync(path.join(outDir, "checkin-streaks.json"), `${JSON.stringify(streakState, null, 2)}\n`, "utf8");
   saveStreakState(streakStatePath, streakState);
 

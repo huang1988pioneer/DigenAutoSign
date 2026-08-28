@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Avalonia.Controls;
@@ -240,6 +241,8 @@ public partial class MainWindow : Window
             if (run is null)
             {
                 RunMetric.Text = "尚無執行紀錄";
+                LastSuccessActionMetric.Text = "—";
+                LastFailureActionMetric.Text = "—";
                 MonthlyStreakMetric.Text = "—";
                 RunTimeMetric.Text = "—";
                 DashboardStatus.Text = "尚未找到 Digen Daily Reward 執行紀錄。";
@@ -252,8 +255,10 @@ public partial class MainWindow : Window
             var accounts = await _github.GetAccountStatusesAsync(repository, run.DatabaseId);
             var success = accounts.Count(a => string.Equals(a.Status, "success", StringComparison.OrdinalIgnoreCase));
             var failure = accounts.Count(a => string.Equals(a.Status, "failure", StringComparison.OrdinalIgnoreCase));
-            var withStreak = accounts.Where(a => (a.Streak ?? 0) > 0).ToArray();
-            var maxStreak = accounts.Select(a => a.Streak ?? 0).DefaultIfEmpty(0).Max();
+            var withStreak = accounts.Where(a => (a.ConsecutiveSuccessDays ?? a.Streak ?? 0) > 0).ToArray();
+            var maxStreak = accounts.Select(a => a.ConsecutiveSuccessDays ?? a.Streak ?? 0).DefaultIfEmpty(0).Max();
+            LastSuccessActionMetric.Text = FormatActionTime(LatestActionTime(accounts.Select(a => a.LastSuccessAt)));
+            LastFailureActionMetric.Text = FormatActionTime(LatestActionTime(accounts.Select(a => a.LastFailureAt)));
             MonthlyStreakMetric.Text = withStreak.Length > 0
                 ? $"最長 {maxStreak} 天 · {withStreak.Length} 帳號有連續"
                 : $"成功 {success} · 失敗 {failure}";
@@ -280,8 +285,13 @@ public partial class MainWindow : Window
                 ? localAlias
                 : account.Alias;
 
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("68,*,90,110") };
-            row.Children.Add(new TextBlock
+            var row = new StackPanel
+            {
+                Spacing = 3,
+                Margin = new Avalonia.Thickness(0, 0, 0, 7)
+            };
+            var summary = new Grid { ColumnDefinitions = new ColumnDefinitions("68,*,90,110") };
+            summary.Children.Add(new TextBlock
             {
                 Text = $"#{account.Number:00}",
                 FontWeight = FontWeight.SemiBold
@@ -293,22 +303,23 @@ public partial class MainWindow : Window
                 TextTrimming = TextTrimming.CharacterEllipsis
             };
             Grid.SetColumn(alias, 1);
-            row.Children.Add(alias);
+            summary.Children.Add(alias);
 
-            var streakText = account.Streak is > 0
-                ? $"{account.Streak} 天"
-                : account.Streak is 0
+            var consecutiveSuccessDays = account.ConsecutiveSuccessDays ?? account.Streak;
+            var streakText = consecutiveSuccessDays is > 0
+                ? $"{consecutiveSuccessDays} 天"
+                : consecutiveSuccessDays is 0
                     ? "0 天"
                     : "—";
             var streakBlock = new TextBlock
             {
                 Text = streakText,
-                Foreground = account.Streak is > 0 ? Brushes.SeaGreen : Brushes.Gray,
+                Foreground = consecutiveSuccessDays is > 0 ? Brushes.SeaGreen : Brushes.Gray,
                 HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
                 Margin = new Avalonia.Thickness(0, 0, 10, 0)
             };
             Grid.SetColumn(streakBlock, 2);
-            row.Children.Add(streakBlock);
+            summary.Children.Add(streakBlock);
 
             var isSuccess = string.Equals(account.Status, "success", StringComparison.OrdinalIgnoreCase);
             var isFailure = string.Equals(account.Status, "failure", StringComparison.OrdinalIgnoreCase);
@@ -323,7 +334,17 @@ public partial class MainWindow : Window
                 HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
             };
             Grid.SetColumn(state, 3);
-            row.Children.Add(state);
+            summary.Children.Add(state);
+
+            row.Children.Add(summary);
+            row.Children.Add(new TextBlock
+            {
+                Text = $"連續成功 {streakText}  ·  上次成功 {FormatActionTime(account.LastSuccessAt)}  ·  上次失敗 {FormatActionTime(account.LastFailureAt)}",
+                Classes = { "muted" },
+                FontSize = 11,
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                Margin = new Avalonia.Thickness(68, 0, 0, 0)
+            });
             MonthlyAccountsPanel.Children.Add(row);
         }
     }
@@ -578,6 +599,44 @@ public partial class MainWindow : Window
         }
         return workspace;
     }
+
+    private static DateTimeOffset? LatestActionTime(IEnumerable<string?> timestamps)
+    {
+        DateTimeOffset? latest = null;
+        foreach (var timestamp in timestamps)
+        {
+            var parsed = ParseActionTime(timestamp);
+            if (parsed is not { } value || (latest is { } current && value <= current))
+                continue;
+            latest = value;
+        }
+        return latest;
+    }
+
+    private static string FormatActionTime(string? timestamp)
+    {
+        if (string.IsNullOrWhiteSpace(timestamp))
+            return "—";
+
+        var parsed = ParseActionTime(timestamp);
+        return parsed is { } value
+            ? FormatActionTime(value)
+            : timestamp.Truncate(24);
+    }
+
+    private static string FormatActionTime(DateTimeOffset? timestamp) =>
+        timestamp is { } value
+            ? TimeZoneInfo.ConvertTime(value, GetTaipeiZone()).ToString("MM/dd HH:mm")
+            : "—";
+
+    private static DateTimeOffset? ParseActionTime(string? timestamp) =>
+        DateTimeOffset.TryParse(
+            timestamp,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var parsed)
+            ? parsed
+            : null;
 
     private static TimeZoneInfo GetTaipeiZone()
     {

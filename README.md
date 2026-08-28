@@ -304,7 +304,7 @@ Each matrix job writes a structured `checkin-result.json` artifact (`checkin-res
 1. Downloads every account result
 2. Restores previous consecutive-day state (GitHub Actions cache)
 3. Updates each account’s **連續簽到天數** (Asia/Taipei calendar days; `checked_in` / `already_done` count as success; same-day re-runs do not double-count; a full missed day resets the streak)
-4. Builds one combined markdown/JSON report (includes `Streak` / `Longest` columns)
+4. Builds one combined markdown/JSON report (includes consecutive success days, last successful/failed action times, and `Longest` columns)
 5. Writes the table into the workflow **Job Summary** (open the `daily-summary` job)
 6. Uploads `checkin-daily-summary` (`*.md` / `*.json` / `checkin-streaks.json`) and `checkin-streaks` artifacts
 7. Fails the summary job if any account status is `failed`
