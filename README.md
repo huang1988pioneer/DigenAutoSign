@@ -283,11 +283,13 @@ DIGEN_TOKEN32
 DIGEN_TOKEN33
 ```
 
-The workflow at `.github/workflows/digen-daily-reward.yml` runs three times daily (Asia/Taipei):
+The workflow at `.github/workflows/digen-daily-reward.yml` runs five times daily (Asia/Taipei):
 
 | Taipei | UTC cron |
 |--------|----------|
 | 05:05 (window 05:00–06:00) | `5 21 * * *` |
+| 08:00 | `0 0 * * *` |
+| 11:00 | `0 3 * * *` |
 | 13:05 (window 13:00–14:00) | `5 5 * * *` |
 | 21:05 (window 21:00–22:00) | `5 13 * * *` |
 

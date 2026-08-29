@@ -57,7 +57,7 @@
           <Button Classes="nav" Click="LoginNavButton_OnClick">更新登入狀態</Button>
         </StackPanel>
 
-        <TextBlock Text="排程：台灣時間 05:05、13:05、21:05（GitHub Actions，33 帳號依序錯開 5–15 秒）"
+        <TextBlock Text="排程：台灣時間 05:05、08:00、11:00、13:05、21:05（GitHub Actions，33 帳號依序錯開 5–15 秒）"
                    TextWrapping="Wrap" FontSize="12" Foreground="#8FB8B3" Margin="0,18,0,0"/>
       </StackPanel>
     </Border>

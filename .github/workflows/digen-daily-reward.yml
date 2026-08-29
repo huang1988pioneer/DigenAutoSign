@@ -2,8 +2,10 @@ name: Digen Daily Reward
 
 on:
   schedule:
-    # Asia/Taipei (UTC+8) windows: 05:00–06:00, 13:00–14:00, 21:00–22:00
+    # Asia/Taipei (UTC+8): 05:05, 08:00, 11:00, 13:05, 21:05
     - cron: "5 21 * * *"   # 05:05 Taipei
+    - cron: "0 0 * * *"    # 08:00 Taipei
+    - cron: "0 3 * * *"    # 11:00 Taipei
     - cron: "5 5 * * *"    # 13:05 Taipei
     - cron: "5 13 * * *"   # 21:05 Taipei
   workflow_dispatch:
